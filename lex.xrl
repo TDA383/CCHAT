@@ -4,21 +4,25 @@ Server = [a-z][0-9a-zA-Z_]*
 
 Channel = #[0-9a-zA-Z_]*
 
+NickName = [a-z][0-9a-zA-Z_]*
+
 Whites  = \s+
 
 Connect = /connect
 
-Join    = /join 
+Join    = /join
 
-WhoIAm  = /whoiam
+WhoAmI  = /whoami
 
-Nick    = /nick 
+Nick    = /nick
+
+Ping    = /ping
 
 Disconnect = /disconnect
 
 Leave = /leave
 
-Digit   = [0-9]
+Digit  = [0-9]
 
 Rules.
 
@@ -26,24 +30,30 @@ Rules.
   {token,{server_name,TokenLine,TokenChars}}.
 
 {Channel} :
-  {token,{channel,TokenLine,TokenChars}}.  
+  {token,{channel,TokenLine,TokenChars}}.
+
+{NickName} :
+  {token,{nick_name,TokenLine,TokenChars}}.
 
 {Connect} :
   {token,{'/connect',TokenLine,TokenChars}}.
 
-{Join} : 
+{Join} :
   {token,{'/join',TokenLine,TokenChars}}.
 
-{WhoIAm} : 
-  {token,{'/whoiam',TokenLine,TokenChars}}.
+{WhoAmI} :
+  {token,{'/whoami',TokenLine,TokenChars}}.
 
-{Nick} : 
+{Nick} :
   {token,{'/nick',TokenLine,TokenChars}}.
 
-{Disconnect} : 
+{Ping} :
+  {token,{'/ping',TokenLine,TokenChars}}.
+
+{Disconnect} :
   {token,{'/disconnect',TokenLine,TokenChars}}.
 
-{Leave} : 
+{Leave} :
   {token,{'/leave',TokenLine,TokenChars}}.
 
 {Whites} : skip_token.
@@ -67,5 +77,5 @@ Rules.
   {token, {'@', TokenLine, TokenChars}}.
 
 
-Erlang code.
 
+Erlang code.

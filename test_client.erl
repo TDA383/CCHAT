@@ -12,7 +12,7 @@
 
 % --- Helpers ----------------------------------------------------------------
 
-% Our own version of genserver:request without a timeout
+% Our own version of helper:request without a timeout
 request(Pid, Data) ->
     Ref = make_ref(),
     Pid!{request, self(), Ref, Data},
@@ -35,7 +35,7 @@ init(Name) ->
     putStrLn(blue("\n# Test: "++Name)),
     catch(unregister(?SERVERATOM)),
     InitState = server:initial_state(?SERVER),
-    Result = genserver:start(?SERVERATOM, InitState, fun server:loop/2),
+    Result = helper:start(?SERVERATOM, InitState, fun server:main/1),
     assert("server startup", is_pid(Result)).
 
 % Start new GUI and register it as Name
@@ -65,7 +65,7 @@ new_client(Nick) ->
 new_client(Nick, GUIName) ->
     ClientName = find_unique_name("client_"),
     ClientAtom = list_to_atom(ClientName),
-    Pid = genserver:start(ClientAtom, client:initial_state(Nick, GUIName), fun client:loop/2),
+    Pid = helper:start(ClientAtom, client:initial_state(Nick, GUIName), fun client:main/1),
     {Pid, Nick, ClientAtom}.
 
 % Start a new client and connect to server
@@ -110,15 +110,15 @@ disconnect(ClientAtom) ->
     Result = request(ClientAtom,disconnect),
     assert_ok(to_string(ClientAtom)++" disconnects from server", Result).
 
-% Send a message and assert it succeeded
+% Send ping
+send_ping(ClientAtom, Nick) ->
+    Result = request(ClientAtom, {ping,Nick}),
+    assert_ok(to_string(ClientAtom)++" pings "++Nick, Result).
+
+% Send a message from GUI to client and assert it succeeded
 send_message(ClientAtom, Channel, Message) ->
     Result = request(ClientAtom, {msg_from_GUI,Channel,Message}),
     assert_ok(to_string(ClientAtom)++" sends message on "++Channel, Result).
-
-% Change nick and assert it succeeded
-change_nick(ClientAtom, Nick) ->
-    Result = request(ClientAtom, {nick,Nick}),
-    assert_ok(to_string(ClientAtom)++" changes nick to "++Nick, Result).
 
 % Receive a message from dummy GUI
 receive_message(Channel, Nick, Message) ->
@@ -312,30 +312,88 @@ write_receive_2_test() ->
     ok.
 
 % Changing nick
-% change_nick_test() ->
-%     init("change_nick"),
-%     Channel = new_channel(),
+change_nick_test_DISABLED() ->
+    init("change_nick"),
+    Channel = new_channel(),
 
-%     % Client 1
-%     {_Pid1, _Nick1, ClientAtom1} = new_client_connect(),
-%     join_channel(ClientAtom1, Channel),
+    % Client 1
+    {_Pid1, _Nick1, ClientAtom1} = new_client_connect(),
+    join_channel(ClientAtom1, Channel),
 
-%     % Client 2
-%     {_Pid2, _Nick2, ClientAtom2} = new_client_connect(true),
-%     join_channel(ClientAtom2, Channel),
+    % Client 2
+    {_Pid2, _Nick2, ClientAtom2} = new_client_connect(true),
+    join_channel(ClientAtom2, Channel),
 
-%     % Change nick of 1
-%     NewNick = find_unique_name("user_"),
-%     change_nick(ClientAtom1, NewNick),
+    % Change nick of 1
+    NewNick = find_unique_name("user_"),
+    Result = request(ClientAtom1, {nick,NewNick}),
+    assert_ok(to_string(ClientAtom1)++" changes nick to "++NewNick, Result),
 
-%     % Client 1 writes to channel
-%     % Make sure prompt in 2 reflects correct name
-%     Message = find_unique_name("message_"),
-%     send_message(ClientAtom1, Channel, Message),
-%     receive_message(Channel, NewNick, Message),
+    % Client 1 writes to channel
+    % Make sure prompt in 2 reflects correct name
+    Message = find_unique_name("message_"),
+    send_message(ClientAtom1, Channel, Message),
+    receive_message(Channel, NewNick, Message),
 
-%     % no_more_messages(),
-%     ok.
+    ok.
+
+% Combined test for changing nick
+change_nick_combined_test() ->
+    init("change_nick_combined"),
+    Channel = new_channel(),
+
+    % Client 1
+    {_Pid1, _Nick1, ClientAtom1} = new_client_connect(),
+    join_channel(ClientAtom1, Channel),
+
+    % Client 2
+    {_Pid2, Nick2, ClientAtom2} = new_client_connect(true),
+    join_channel(ClientAtom2, Channel),
+
+    % Change nick of 1 to something unique
+    NewNick = find_unique_name("user_"),
+    Result = request(ClientAtom1, {nick,NewNick}),
+    case Result of
+        % Client supports online nick change
+        ok ->
+            % Client 1 writes to channel
+            % Make sure prompt in 2 reflects correct name
+            Message = find_unique_name("message_"),
+            send_message(ClientAtom1, Channel, Message),
+            receive_message(Channel, NewNick, Message),
+
+            % Change nick of 1 to 2
+            Result2 = request(ClientAtom1,{nick,Nick2}),
+            assert_error(to_string(ClientAtom1)++" changing nick to "++Nick2, Result2, nick_taken) ;
+
+        % Client doesn't support online nick change
+        {error, user_already_connected, _} -> ok
+    end.
+
+% Ping test (not run automatically)
+ping() ->
+    init("ping"),
+
+    % Client 1
+    {_Pid1, _Nick1, _ClientAtom1} = new_client_connect(true),
+
+    % Client 2
+    {_Pid2, _Nick2, _ClientAtom2} = new_client_connect(),
+
+    % Send ping from 1 to 2
+    send_ping(_ClientAtom1, _Nick2),
+
+    % Make sure pong is received
+    % Don't check message format, since students may change it
+    receive
+        {msg_to_SYSTEM, _Msg} ->
+            assert_ok(to_string(_ClientAtom1)++" receives pong",ok),
+            putStrLn(green(_Msg))
+    after
+        1000 ->
+            putStrLn(red("nothing received after 1000ms")),
+            ?assert(false)
+    end.
 
 % --- Bad unit tests ---------------------------------------------------------
 
@@ -414,21 +472,21 @@ leave_not_joined_test() ->
     assert_error(to_string(ClientAtom2)++" leaving "++Channel, Result2, user_not_joined).
 
 % Trying to take a nick which is taken
-% nick_taken_test() ->
-%     init("nick_taken"),
-%     Channel = new_channel(),
+nick_taken_test_DISABLED() ->
+    init("nick_taken"),
+    Channel = new_channel(),
 
-%     % Client 1
-%     {_Pid1, _Nick1, ClientAtom1} = new_client_connect(),
-%     join_channel(ClientAtom1, Channel),
+    % Client 1
+    {_Pid1, _Nick1, ClientAtom1} = new_client_connect(),
+    join_channel(ClientAtom1, Channel),
 
-%     % Client 2
-%     {_Pid2, Nick2, ClientAtom2} = new_client_connect(),
-%     join_channel(ClientAtom2, Channel),
+    % Client 2
+    {_Pid2, Nick2, ClientAtom2} = new_client_connect(),
+    join_channel(ClientAtom2, Channel),
 
-%     % Change nick of 1 to 2
-%     Result = request(ClientAtom1,{nick,Nick2}),
-%     assert_error(to_string(ClientAtom1)++" changing nick to "++Nick2, Result, nick_taken).
+    % Change nick of 1 to 2
+    Result = request(ClientAtom1,{nick,Nick2}),
+    assert_error(to_string(ClientAtom1)++" changing nick to "++Nick2, Result, nick_taken).
 
 % --- Performance unit tests -------------------------------------------------
 
@@ -448,7 +506,7 @@ many_users_one_channel() ->
                         ClientAtom = list_to_atom(ClientName),
                         GUIName = "gui_perf1_"++Is,
                         new_gui(GUIName),
-                        genserver:start(ClientAtom, client:initial_state(Nick, GUIName), fun client:loop/2),
+                        helper:start(ClientAtom, client:initial_state(Nick, GUIName), fun client:main/1),
                         connect(ClientAtom),
                         join_channel(ClientAtom, Channel),
                         send_message(ClientAtom, Channel, "message_"++Is++"_1"),
@@ -489,7 +547,7 @@ many_users_many_channels() ->
                         ClientAtom = list_to_atom(ClientName),
                         GUIName = "gui_perf2_"++Is,
                         new_gui(GUIName),
-                        genserver:start(ClientAtom, client:initial_state(Nick, GUIName), fun client:loop/2),
+                        helper:start(ClientAtom, client:initial_state(Nick, GUIName), fun client:main/1),
                         connect(ClientAtom),
                         G = fun(Ch_Ix) ->
                                     Ch_Ixs = lists:flatten(io_lib:format("~p", [Ch_Ix])),
