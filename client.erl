@@ -91,10 +91,10 @@ loop(St = #cl_st { gui = GUIName }, MsgFromClient) ->
       {msg_to_GUI, Channel, Name++"> "++Msg}),
     {ok, St}.
 
-%% Sends a request to the current server.
+%% Sends a request to the current server. If it fails, it returns false.
 request(#cl_st{server=Server}, Request) ->
   ServerAtom = list_to_atom(Server),
   ServerAtom ! {request, self(), Request};
 
 request(_, _) ->
-  self() ! {error, user_not_connected}.
+  false.
