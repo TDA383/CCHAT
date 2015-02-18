@@ -21,11 +21,10 @@ initial_state(Nick, GUIName) ->
 
 %% Connect to server
 loop(St, {connect, Server}) ->
-  ServerAtom = list_to_atom(Server),  
-  ServerAtom ! {request, self(), {connect, St#cl_st.nick}},
+  NewState = St#cl_st{server = Server},
+  request(NewState, {connect, St#cl_st.nick}),
   receive
     ok ->
-      NewState = St#cl_st{server = Server},
       {ok, NewState};
     {error, user_already_connected} ->
       {{error, user_already_connected, "You are already connected!"}, St}
@@ -35,45 +34,40 @@ loop(St, {connect, Server}) ->
 
 %% Disconnect from server
 loop(St, disconnect) ->
-  case St#cl_st.connected_channels of
-    [] ->
-      ServerAtom = list_to_atom(St#cl_st.server),  
-      ServerAtom ! {request, self(), {disconnect, St#cl_st.nick}},
-      receive
-        ok ->
-          {ok, St};
-        {error, user_not_connected} ->
-          {error, user_not_connected, "You are not connected to the server!"}
-      after 3000 -> 
-        {{error, server_not_reached, "The server could not be reached!"}, St}
-      end;
-    _ ->
-      {{error, leave_channels_first,
-        "You must leave all chat rooms before disconnecting!"}, St}
+  NewState = St#cl_st{server = undefined},
+  request(St, {disconnect, St#cl_st.nick}),
+  receive
+    ok ->
+      {ok, NewState};
+    {error, user_not_connected} ->
+      {{error, user_not_connected, "You are not connected to the server!"}, St}
+  after 3000 ->
+    {{error, server_not_reached, "The server could not be reached!"}, St}
   end;
 
 % Join channel
 loop(St, {join, Channel}) ->
-  case lists:member(Channel, connected_channels) of
-    false ->       
-      ServerAtom = list_to_atom(St#cl_st.server),  
-      ServerAtom ! {request, self(), {join, Channel}},
-      receive
-        ok ->
-          NewState = St#cl_st{connected_channels
-                                = [ Channel | St#cl_st.connected_channels] },
-          {ok, NewState}
-      after 3000 -> 
-        {{error, server_not_reached, "The server could not be reached!"}, St}
-      end;
-    true -> 
-      {{error, user_already_joined,
-        "You have already joined this chat room!"}, St};
+  request(St, {join, St#cl_st.nick, Channel}),
+  receive
+    ok ->
+      {ok, St};
+    {error, user_already_joined} ->
+      {{error, user_already_joined, "You have already joined!"}, St}
+  after 3000 ->
+    {{error, server_not_reached, "The server could not be reached!"}, St}
+  end;
 
 %% Leave channel
 loop(St, {leave, Channel}) ->
-    % {ok, St} ;
-    {{error, not_implemented, "Not implemented"}, St} ;
+  request(St, {leave, St#cl_st.nick, Channel}),
+  receive
+    ok ->
+      {ok, St};
+    {error, user_not_joined} ->
+      {{error, user_not_joined, "You haven't joined the chat room!"}, St}
+  after 3000 ->
+    {{error, server_not_reached, "The server could not be reached!"}, St}
+  end;
 
 % Sending messages
 loop(St, {msg_from_GUI, Channel, Msg}) ->
@@ -93,5 +87,14 @@ loop(St, {nick, Nick}) ->
 %% Incoming message
 loop(St = #cl_st { gui = GUIName }, MsgFromClient) ->
     {incoming_msg, Channel, Name, Msg} = MsgFromClient,
-    gen_server:call(list_to_atom(GUIName), {msg_to_GUI, Channel, Name++"> "++Msg}),
+    gen_server:call(list_to_atom(GUIName),
+      {msg_to_GUI, Channel, Name++"> "++Msg}),
     {ok, St}.
+
+%% Sends a request to the current server.
+request(#cl_st{server=Server}, Request) ->
+  ServerAtom = list_to_atom(Server),
+  ServerAtom ! {request, self(), Request};
+
+request(_, _) ->
+  self() ! {error, user_not_connected}.
