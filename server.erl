@@ -13,12 +13,11 @@ main(State) ->
 initial_state(ServerName) ->
   #server_st{name = ServerName}.
 
-%% TODO: Fix error when trying to join chat rooms before connecting.
-loop(St, {connect, User}) ->  
-  case lists:member(User, St#server_st.users) of
+loop(St, {connect, User}) ->
+  {UserName, _} = User,
+  case lists:keymember(UserName, 1, St#server_st.users) of
     false  ->
       NewState = St#server_st{users = [ User | St#server_st.users]},
-      printUsers(NewState#server_st.users),
       {ok, NewState};
     true ->
       {{error, user_already_connected}, St}
@@ -26,15 +25,15 @@ loop(St, {connect, User}) ->
 
 %% TODO: Fix a bug where the user can disconnect before leaving chat rooms.
 loop(St, {disconnect, User}) ->
-  case lists:member(User, St#server_st.users) of
+  {UserName, _} = User,
+  case lists:keymember(UserName, 1, St#server_st.users) of
     true  ->
       case isInAChannel(User, St#server_st.channels) of
-        true -> 
-          {error, leave_channels_first};
-        false ->            
+        true ->
+          {{error, leave_channels_first}, St};
+        false ->
           NewState = #server_st{users = lists:delete(User,
             St#server_st.users)},
-          printUsers(NewState#server_st.users),
           {ok, NewState}
       end;
     false ->
@@ -42,35 +41,34 @@ loop(St, {disconnect, User}) ->
   end;
 
 loop(St, {join, User, Channel}) ->
-  {UserName, _} = User,    
-  case findAndRemoveChannel(Channel, St#server_st.channels) of
-    {{_, UsersFound}, NewList} ->
-      case lists:member(User, UsersFound) of
-        false ->         
-          sendToUsers(UsersFound,
-            {incoming_msg, Channel, UserName,
-            "*"++UserName++" joined the room*"}),            
+  case lists:member(User, St#server_st.users) of
+    true ->
+      {UserName, _} = User,
+      case lists:keytake(Channel, 1, St#server_st.channels) of
+        {value, {_, UsersFound}, NewChannelList} ->
+          case lists:keymember(UserName, 1, UsersFound) of
+            false ->
+              NewState = St#server_st{channels
+                = [ {Channel, [ User | UsersFound ]} | NewChannelList]},
+              {ok, NewState};
+            true ->
+              {{error, user_already_joined}, St}
+          end;
+        false ->
           NewState = St#server_st{channels
-            = [ {Channel, [ User | UsersFound ]} | NewList]},
-          {ok, NewState};
-        true ->
-          {{error, user_already_joined}, St}
+            = [ {Channel, [User]} | St#server_st.channels ]},
+          {ok, NewState}
       end;
     false ->
-      NewState = St#server_st{channels
-        = [ {Channel, [User]} | St#server_st.channels ]},
-      {ok, NewState}
+      {{error, user_not_connected}, St}
   end;
 
 loop(St, {leave, User, Channel}) ->
-  {UserName, _} = User,    
-  case findAndRemoveChannel(Channel, St#server_st.channels) of
-    {{_, UsersFound}, NewList} ->
-      case lists:member(User, UsersFound) of
+  {UserName, _} = User,
+  case lists:keytake(Channel, 1, St#server_st.channels) of
+    {value, {_, UsersFound}, NewList} ->
+      case lists:keymember(UserName, 1, UsersFound) of
         true ->
-          sendToUsers(UsersFound,
-            {incoming_msg, Channel, UserName,
-            "*"++UserName++" left the room*"}),           
           NewState = St#server_st{channels
             = [ {Channel, lists:delete(User, UsersFound) } | NewList]},
           {ok, NewState};
@@ -81,51 +79,31 @@ loop(St, {leave, User, Channel}) ->
       {{error, user_not_joined}, St}
   end;
 
-loop(St, {send, User, Channel, Msg}) ->
-  {UserName, _} = User,  
-  case findAndRemoveChannel(Channel, St#server_st.channels) of
-    {{_, UsersFound}, _} ->
-      case lists:member(User, UsersFound) of
-        true ->
-          sendToUsers(lists:delete(User, UsersFound),
+loop(St, {send_msg, User, Channel, Msg}) ->
+  {UserName, _} = User,
+  case lists:keyfind(Channel, 1, St#server_st.channels) of
+    {_, UsersFound} ->
+      case lists:keytake(UserName, 1, UsersFound) of
+        {_, _, Receivers} ->
+          sendToUsers(Receivers,
             {incoming_msg, Channel, UserName, Msg}),
           {ok, St};
         false ->
+          io:format("User ~p not joined~n", [UserName]),
+          io:format("~p~n", [UsersFound]),
           {{error, user_not_joined}, St}
       end;
     false ->
       {{error, user_not_joined}, St}
   end.
 
-%% Looks for a channel in a list of tuples, where the tuples contains name of a
-%% channel and its connected users. If it fails, false is returned. If it
-%% succeeds, then a tuple consisting the found tuple and the new list is
-%% returned.
-findAndRemoveChannel(_, []) ->
-  false;
-
-findAndRemoveChannel(ChannelSearch, [{FirstChannel, FirstUsers} | T]) ->
-  case FirstChannel =:= ChannelSearch of
-    true ->
-      {{FirstChannel, FirstUsers}, T};
-    false ->
-      Result = findAndRemoveChannel(ChannelSearch, T),
-      case Result of
-        {{ChannelFound, UsersFound}, NewList} ->
-          {{ChannelFound, UsersFound},
-            [ {FirstChannel, FirstUsers} | NewList ]};
-        false ->
-          false
-      end
-  end.
-
 %% Looks if the user is in any channel in the list.
 isInAChannel(_, []) ->
   false;
 
-isInAChannel(User, [ {_, FirstUsers} | T]) -> 
+isInAChannel(User, [ {_, FirstUsers} | T]) ->
   case lists:member(User, FirstUsers) of
-    true -> 
+    true ->
       true;
     false ->
       isInAChannel(User, T)
@@ -133,14 +111,8 @@ isInAChannel(User, [ {_, FirstUsers} | T]) ->
 
 %% Sends a message to all the users in the list.
 sendToUsers([], _) ->
-  ok; 
+  ok;
 
-sendToUsers([ {_, UserPid} | T ], Msg) -> 
+sendToUsers([ {_, UserPid} | T ], Msg) ->
   UserPid ! {request, self(), ref, Msg},
   sendToUsers(T, Msg).
-
-%% Prints the list of users in the console.
-printUsers([]) -> 
-  ok;printUsers([User | T]) -> 
-  io:format("User: ~p~n", [User]),
-  printUsers(T).

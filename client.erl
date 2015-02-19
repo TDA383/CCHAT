@@ -21,67 +21,35 @@ initial_state(Nick, GUIName) ->
 
 %% Connect to server
 loop(St, {connect, Server}) ->
-    NewState = St#cl_st{server = Server},
-    serverRequest(NewState, {connect, {St#cl_st.nick, self()}}),
-  receive
-    ok ->
-      {ok, NewState};
-    {error, user_already_connected} ->
-      {{error, user_already_connected, "You are already connected!"}, St}
-  after 3000 ->
-    {{error, server_not_reached, "The server could not be reached!"}, St}
-  end;
+  NewState = St#cl_st{server = Server},
+  serverRequest(NewState, {connect, user(St)});
 
 %% Disconnect from server
 loop(St, disconnect) ->
-  NewState = St#cl_st{server = undefined},
-  serverRequest(St, {disconnect, {St#cl_st.nick, self()}}),
-  receive
-    ok ->
-      {ok, NewState};
-    {error, user_not_connected} ->
-      {{error, user_not_connected, "You are not connected to the server!"}, St};
-    {error, leave_channels_first} ->
-      {{error, leave_channels_first}, "Leave all channels before disconnecting!"}
-  after 3000 ->
-    {{error, server_not_reached, "The server could not be reached!"}, St}
+  case St#cl_st.server of
+    undefined ->
+      errorMessage({error, user_not_connected}, St);
+    _ ->
+      Response = serverRequest(St, {disconnect, user(St)}),
+      case Response of
+        {ok, _} ->
+          {ok, St#cl_st{server = undefined}};
+        Error ->
+          Error
+      end
   end;
 
 % Join channel
 loop(St, {join, Channel}) ->
-  serverRequest(St, {join, {St#cl_st.nick, self()}, Channel}),
-  receive
-    ok ->
-      {ok, St};
-    {error, user_already_joined} ->
-      {{error, user_already_joined, "You have already joined!"}, St}
-  after 3000 ->
-    {{error, server_not_reached, "The server could not be reached!"}, St}
-  end;
+  serverRequest(St, {join, user(St), Channel});
 
 %% Leave channel
 loop(St, {leave, Channel}) ->
-  serverRequest(St, {leave, {St#cl_st.nick, self()}, Channel}),
-  receive
-    ok ->
-      {ok, St};
-    {error, user_not_joined} ->
-      {{error, user_not_joined, "You haven't joined the chat room!"}, St}
-  after 3000 ->
-    {{error, server_not_reached, "The server could not be reached!"}, St}
-  end;
+  serverRequest(St, {leave, user(St), Channel});
 
 % Sending messages
 loop(St, {msg_from_GUI, Channel, Msg}) ->
-  serverRequest(St, {send,{St#cl_st.nick, self()}, Channel, Msg}),
-  receive
-    ok ->
-      {ok, St};
-    {error, user_not_joined} ->
-      {{error, user_not_joined, "You haven't joined the chat room!"}, St}
-  after 3000 ->
-    {{error, server_not_reached, "The server could not be reached!"}, St}
-  end;
+  serverRequest(St, {send_msg, user(St), Channel, Msg});
 
 %% Get current nick
 loop(St, whoami) ->
@@ -90,7 +58,7 @@ loop(St, whoami) ->
 %% Change nick
 loop(St, {nick, Nick}) ->
   NewState = St#cl_st{nick = Nick},
-  {ok, NewState};   
+  {ok, NewState};
 
 %% Incoming message
 loop(St = #cl_st { gui = GUIName }, MsgFromClient) ->
@@ -99,15 +67,51 @@ loop(St = #cl_st { gui = GUIName }, MsgFromClient) ->
       {msg_to_GUI, Channel, Name++"> "++Msg}),
     {ok, St}.
 
-%% Sends a request to the current server. If it fails, it returns false.
-serverRequest(#cl_st{server=Server}, Request) ->
+%% Returns the user tuple for the server.
+user(St) ->
+  {St#cl_st.nick, self()}.
+
+%% Sends a request to the current server. If it fails to connect, it returns
+%% {error, user_not_connected}. If it succeeds, it will either return 'ok' or
+%% the error message received from the server. If no message is received after
+%% 3 seconds, error 'server_not_reached' will be returned.
+serverRequest(St, Request) ->
+  Server = St#cl_st.server,
   ServerAtom = list_to_atom(Server),
   case lists:member(ServerAtom, registered()) of
-    true -> 
-      ServerAtom ! {request, self(), Request};
+    true ->
+      ServerAtom ! {request, self(), Request},
+      receive
+        ok ->
+          {ok, St};
+        {error, Error} ->
+          errorMessage({error, Error}, St)
+      after 3000 ->
+        errorMessage({error, server_not_reached}, St)
+      end;
     false ->
-      false
-  end;
+      errorMessage({error, server_not_reached}, St)
+  end.
 
-serverRequest(_, _) ->
-  false.
+%% Returns the error message corresponding to the error atom.
+errorMessage(Error, St) ->
+  case Error of
+    {error, user_not_connected} ->
+      {{error, user_not_connected,
+        "You are not connected to the server!"},
+        St#cl_st{server = undefined}};
+    {error, user_already_connected} ->
+      {{error, user_already_connected,
+        "You are already connected!"}, St};
+    {error, leave_channels_first} ->
+      {{error, leave_channels_first,
+        "Leave all channels before disconnecting!"}, St};
+    {error, user_not_joined} ->
+      {{error, user_not_joined, "You haven't joined the chat room!"}, St};
+    {error, user_already_joined} ->
+      {{error, user_already_joined, "You have already joined!"}, St};
+    {error, server_not_reached} ->
+      {{error, server_not_reached,
+        "The server could not be reached, you have been disconnected!"},
+        St#cl_st{server = undefined}}
+  end.
