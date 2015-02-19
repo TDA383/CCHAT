@@ -2,7 +2,7 @@
 -export([main/1, initial_state/2]).
 -include_lib("./defs.hrl").
 
-%% Receive messages from GUI and handle them accordingly
+%% Receives messages from GUI and the server, and handles them accordingly.
 main(State) ->
   receive
     {request, From, Ref, Request} ->
@@ -21,8 +21,8 @@ initial_state(Nick, GUIName) ->
 
 %% Connect to server
 loop(St, {connect, Server}) ->
-  NewState = St#cl_st{server = Server},
-  serverRequest(NewState, {connect, St#cl_st.nick}),
+    NewState = St#cl_st{server = Server},
+    serverRequest(NewState, {connect, {St#cl_st.nick, self()}}),
   receive
     ok ->
       {ok, NewState};
@@ -35,19 +35,21 @@ loop(St, {connect, Server}) ->
 %% Disconnect from server
 loop(St, disconnect) ->
   NewState = St#cl_st{server = undefined},
-  serverRequest(St, {disconnect, St#cl_st.nick}),
+  serverRequest(St, {disconnect, {St#cl_st.nick, self()}}),
   receive
     ok ->
       {ok, NewState};
     {error, user_not_connected} ->
-      {{error, user_not_connected, "You are not connected to the server!"}, St}
+      {{error, user_not_connected, "You are not connected to the server!"}, St};
+    {error, leave_channels_first} ->
+      {{error, leave_channels_first}, "Leave all channels before disconnecting!"}
   after 3000 ->
     {{error, server_not_reached, "The server could not be reached!"}, St}
   end;
 
 % Join channel
 loop(St, {join, Channel}) ->
-  serverRequest(St, {join, St#cl_st.nick, Channel}),
+  serverRequest(St, {join, {St#cl_st.nick, self()}, Channel}),
   receive
     ok ->
       {ok, St};
@@ -59,7 +61,7 @@ loop(St, {join, Channel}) ->
 
 %% Leave channel
 loop(St, {leave, Channel}) ->
-  serverRequest(St, {leave, St#cl_st.nick, Channel}),
+  serverRequest(St, {leave, {St#cl_st.nick, self()}, Channel}),
   receive
     ok ->
       {ok, St};
@@ -71,7 +73,7 @@ loop(St, {leave, Channel}) ->
 
 % Sending messages
 loop(St, {msg_from_GUI, Channel, Msg}) ->
-  serverRequest(St, {msg_from_GUI, St#cl_st.nick, Channel}),
+  serverRequest(St, {send,{St#cl_st.nick, self()}, Channel, Msg}),
   receive
     ok ->
       {ok, St};
@@ -83,13 +85,12 @@ loop(St, {msg_from_GUI, Channel, Msg}) ->
 
 %% Get current nick
 loop(St, whoami) ->
-    % {"nick", St} ;
-    {{error, not_implemented, "Not implemented"}, St} ;
+  {St#cl_st.nick, St};
 
 %% Change nick
 loop(St, {nick, Nick}) ->
-    % {ok, St} ;
-    {{error, not_implemented, "Not implemented"}, St} ;
+  NewState = St#cl_st{nick = Nick},
+  {ok, NewState};   
 
 %% Incoming message
 loop(St = #cl_st { gui = GUIName }, MsgFromClient) ->
@@ -101,7 +102,12 @@ loop(St = #cl_st { gui = GUIName }, MsgFromClient) ->
 %% Sends a request to the current server. If it fails, it returns false.
 serverRequest(#cl_st{server=Server}, Request) ->
   ServerAtom = list_to_atom(Server),
-  ServerAtom ! {request, self(), Request};
+  case lists:member(ServerAtom, registered()) of
+    true -> 
+      ServerAtom ! {request, self(), Request};
+    false ->
+      false
+  end;
 
 serverRequest(_, _) ->
   false.
