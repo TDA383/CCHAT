@@ -22,7 +22,7 @@ initial_state(Nick, GUIName) ->
 %% Connect to server
 loop(St, {connect, Server}) ->
   NewState = St#cl_st{server = Server},
-  request(NewState, {connect, St#cl_st.nick}),
+  serverRequest(NewState, {connect, St#cl_st.nick}),
   receive
     ok ->
       {ok, NewState};
@@ -35,7 +35,7 @@ loop(St, {connect, Server}) ->
 %% Disconnect from server
 loop(St, disconnect) ->
   NewState = St#cl_st{server = undefined},
-  request(St, {disconnect, St#cl_st.nick}),
+  serverRequest(St, {disconnect, St#cl_st.nick}),
   receive
     ok ->
       {ok, NewState};
@@ -47,7 +47,7 @@ loop(St, disconnect) ->
 
 % Join channel
 loop(St, {join, Channel}) ->
-  request(St, {join, St#cl_st.nick, Channel}),
+  serverRequest(St, {join, St#cl_st.nick, Channel}),
   receive
     ok ->
       {ok, St};
@@ -59,7 +59,7 @@ loop(St, {join, Channel}) ->
 
 %% Leave channel
 loop(St, {leave, Channel}) ->
-  request(St, {leave, St#cl_st.nick, Channel}),
+  serverRequest(St, {leave, St#cl_st.nick, Channel}),
   receive
     ok ->
       {ok, St};
@@ -71,8 +71,15 @@ loop(St, {leave, Channel}) ->
 
 % Sending messages
 loop(St, {msg_from_GUI, Channel, Msg}) ->
-    % {ok, St} ;
-    {{error, not_implemented, "Not implemented"}, St} ;
+  serverRequest(St, {msg_from_GUI, St#cl_st.nick, Channel}),
+  receive
+    ok ->
+      {ok, St};
+    {error, user_not_joined} ->
+      {{error, user_not_joined, "You haven't joined the chat room!"}, St}
+  after 3000 ->
+    {{error, server_not_reached, "The server could not be reached!"}, St}
+  end;
 
 %% Get current nick
 loop(St, whoami) ->
@@ -92,9 +99,9 @@ loop(St = #cl_st { gui = GUIName }, MsgFromClient) ->
     {ok, St}.
 
 %% Sends a request to the current server. If it fails, it returns false.
-request(#cl_st{server=Server}, Request) ->
+serverRequest(#cl_st{server=Server}, Request) ->
   ServerAtom = list_to_atom(Server),
   ServerAtom ! {request, self(), Request};
 
-request(_, _) ->
+serverRequest(_, _) ->
   false.

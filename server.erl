@@ -61,8 +61,25 @@ loop(St, {leave, User, Channel}) ->
       end;
     false ->
       {error, user_not_joined}
-  end.
+  end;
 
+loop(St, {msg_from_GUI, User, Channel, Msg}) ->
+  case findAndRemoveChannel(Channel, St#server_st.channels) of
+    {{_, UsersFound}, NewList} ->
+      case lists:member(User, UsersFound) of
+        true ->
+          NewState = St#server_st{channels
+            = [ {Channel, lists:delete(User, UsersFound) } | NewList]},
+          {ok, NewState};
+        false ->
+          {error, user_not_joined}
+      end;
+    false ->
+      {error, user_not_joined}
+  end;
+
+loop(St, {has_joined, User, Channel}) ->
+  end.
 %% Looks for a channel in a list of tuples, where the tuples contains name of a
 %% channel and its connected users. If it fails, false is returned. If it
 %% succeeds, then a tuple consisting the found tuple and the new list is
