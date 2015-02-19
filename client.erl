@@ -57,8 +57,13 @@ loop(St, whoami) ->
 
 %% Change nick
 loop(St, {nick, Nick}) ->
-  NewState = St#cl_st{nick = Nick},
-  {ok, NewState};
+  case St#cl_st.server of
+    undefined ->
+      NewState = St#cl_st{nick = Nick},
+      {ok, NewState};
+    _ ->
+      errorMessage({error, user_already_connected}, St)
+  end;
 
 %% Incoming message
 loop(St = #cl_st { gui = GUIName }, MsgFromClient) ->

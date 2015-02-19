@@ -114,5 +114,5 @@ sendToUsers([], _) ->
   ok;
 
 sendToUsers([ {_, UserPid} | T ], Msg) ->
-  UserPid ! {request, self(), ref, Msg},
+  UserPid ! {request, self(), make_ref(), Msg},
   sendToUsers(T, Msg).
