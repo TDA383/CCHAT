@@ -85,11 +85,12 @@ serverRequest(St, Request) ->
   ServerAtom = list_to_atom(Server),
   case lists:member(ServerAtom, registered()) of
     true ->
-      ServerAtom ! {request, self(), Request},
+      Ref = make_ref(),
+      ServerAtom ! {request, self(), Ref, Request},
       receive
-        ok ->
+        {result, Ref, ok} ->
           {ok, St};
-        {error, Error} ->
+        {result, Ref, {error, Error}} ->
           errorMessage({error, Error}, St)
       after 3000 ->
         errorMessage({error, server_not_reached}, St)

@@ -4,9 +4,9 @@
 
 main(State) ->
   receive
-    {request, From, Request} ->
+    {request, From, Ref, Request} ->
       {Response, NextState} = loop(State, Request),
-      From ! Response,
+      From ! {result, Ref, Response},
       main(NextState)
   end.
 
@@ -114,5 +114,5 @@ sendToUsers([], _) ->
   ok;
 
 sendToUsers([ {_, UserPid} | T ], Msg) ->
-  UserPid ! {request, self(), make_ref(), Msg},
+  UserPid ! {request, self(), async, Msg},
   sendToUsers(T, Msg).
