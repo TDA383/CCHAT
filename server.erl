@@ -2,25 +2,32 @@
 -export([main/1, initial_state/1]).
 -include_lib("./defs.hrl").
 
+%% Receives messages from the client and handles them accordingly.
 main(State) ->
   receive
     {request, From, Ref, Request} ->
       case Request of
-        {connect,_} -> 
+        {connect,_} ->
           {Response, NextState} = loop(State, Request),
           From ! {result, Ref, Response};
-        {disconnect,_} -> 
+        {disconnect,_} ->
           {Response, NextState} = loop(State, Request),
           From ! {result, Ref, Response};
-        _ -> 
+        _ ->
           {_, NextState} = loop(State, Ref, Request)
         end,
       main(NextState)
   end.
-
+%% Produces the initial state.
 initial_state(ServerName) ->
   #server_st{name = ServerName}.
 
+%% ---------------------------------------------------------------------------
+
+%% Loop handles each kind of request from a client.
+
+%% Connects the client and updates the server state, if not the client is
+%% already a member.
 loop(St, {connect, User}) ->
   {Nick, _} = User,
   case lists:keymember(Nick, 1, St#server_st.users) of
@@ -31,11 +38,13 @@ loop(St, {connect, User}) ->
       {{error, user_already_connected}, St}
   end;
 
+%% Disconnects the client and updates the server state, if the client
+%% is already connected and not connected to a channel.
 loop(St, {disconnect, User}) ->
   {Nick, _} = User,
   case lists:keymember(Nick, 1, St#server_st.users) of
-    true  ->      
-      case isInAChannel(User, St#server_st.channels) of
+    true  ->
+    case isInAChannel(User, St#server_st.channels) of
         false ->
           NewState = #server_st{users = lists:delete(User,
             St#server_st.users)},
@@ -47,20 +56,23 @@ loop(St, {disconnect, User}) ->
       {{error, user_not_connected}, St}
   end.
 
+%% Connects the client to the specified Channel by sending request to the
+%% channel and updates the server state. A new channel is created if the
+%%% specified channel doesn't exist.
 loop(St, Ref, {join, User, Channel}) ->
-  {_, Pid} = User,  
+  {_, Pid} = User,
   case lists:member(User, St#server_st.users) of
     true ->
       ChannelAtom = list_to_atom(Channel),
       case lists:member(ChannelAtom, registered()) of
-        false ->      
+        false ->
           helper:start(ChannelAtom, channel:initial_state(Channel),
-            fun channel:main/1),       
+            fun channel:main/1),
           ChannelAtom ! {request, Pid, Ref, {join, User}},
           NewState = St#server_st{channels =
-            [ChannelAtom | St#server_st.channels]},          
+            [ChannelAtom | St#server_st.channels]},
           {ok, NewState};
-        true -> 
+        true ->
           ChannelAtom ! {request, Pid, Ref, {join, User}},
           {ok, St}
       end;
@@ -69,16 +81,19 @@ loop(St, Ref, {join, User, Channel}) ->
       {error, St}
   end;
 
+%% Disconnects the client from the specified Channel by sending a request to
+%% the channel and updates the server state, if and only if the client is
+%% already connected to the channel.
 loop(St, Ref, {leave, User, Channel}) ->
   {_, Pid} = User,
   case lists:member(User, St#server_st.users) of
     true ->
       ChannelAtom = list_to_atom(Channel),
       case lists:member(ChannelAtom, registered()) of
-        true ->      
+        true ->
           ChannelAtom ! {request, Pid, Ref, {leave, User}},
           {ok, St};
-        false -> 
+        false ->
           Pid ! {result, Ref, {error, user_not_joined}},
           {error, St}
       end;
@@ -87,16 +102,18 @@ loop(St, Ref, {leave, User, Channel}) ->
       {error, St}
   end;
 
+%% Sends a request to the channel to send a message to all other members of
+%% the channel.
 loop(St, Ref, {send_msg, User, Channel, Msg}) ->
    {_, Pid} = User,
   case lists:member(User, St#server_st.users) of
     true ->
       ChannelAtom = list_to_atom(Channel),
       case lists:member(ChannelAtom, registered()) of
-        true ->      
+        true ->
           ChannelAtom ! {request, Pid, Ref, {send_msg, User, Msg}},
           {ok, St};
-        false -> 
+        false ->
           Pid ! {result, Ref, {error, user_not_joined}},
           {error, St}
       end;
@@ -105,16 +122,16 @@ loop(St, Ref, {send_msg, User, Channel, Msg}) ->
       {error, St}
   end.
 
-isInAChannel(_, []) -> 
+%% Determines whether a user is connected to one or more channels, or not.
+isInAChannel(_, []) ->
   false;
 
-isInAChannel(User, [ChannelAtom | T]) -> 
+isInAChannel(User, [ChannelAtom | T]) ->
   Ref = make_ref(),
   ChannelAtom ! {request, self(), Ref, {member, User}},
   receive
-    true ->
+    {result, Ref, true} ->
       true;
-    false -> 
+    {result, Ref, false} ->
       isInAChannel(User, T)
   end.
-    

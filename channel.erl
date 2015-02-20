@@ -2,6 +2,7 @@
 -include_lib("./defs.hrl").
 -export([main/1, initial_state/1]).
 
+%% Receives messages from the server and handles them accordingly.
 main(State) ->
   receive
     {request, From, Ref, Request} ->
@@ -10,12 +11,15 @@ main(State) ->
       main(NextState)
   end.
 
+%% Produces the initial state.
 initial_state(ChannelName) ->
   #ch_st{name = ChannelName}.
 
-loop(St, {member, {Nick, _}}) ->
-  {lists:keymember(Nick, 1, St#ch_st.users), St}; 
+%% ---------------------------------------------------------------------------
 
+%% Loop handles each kind of request from a client.
+
+%% Connects the user to this channel, if not already connected.
 loop(St, {join, User}) ->
   {Nick, _} = User,
   case lists:keymember(Nick, 1, St#ch_st.users) of
@@ -26,6 +30,7 @@ loop(St, {join, User}) ->
       {{error, user_already_joined}, St}
   end;
 
+%% Disconnects the user from this channel, if not already disconnected.
 loop(St, {leave, User}) ->
   {Nick, _} = User,
   case lists:keymember(Nick, 1, St#ch_st.users) of
@@ -36,6 +41,7 @@ loop(St, {leave, User}) ->
       {{error, user_not_joined}, St}
   end;
 
+%% Sends a message.
 loop(St, {send_msg, Sender, Msg}) ->
   {Nick, _} = Sender,
   case lists:keymember(Nick, 1, St#ch_st.users) of
@@ -45,7 +51,12 @@ loop(St, {send_msg, Sender, Msg}) ->
       {ok, St};
     false ->
       {{error, user_not_joined}, St}
-  end.
+  end;
+
+%% Checks whether a user is connected to this channel or not.
+loop(St, {member, {Nick, _}}) ->
+  {lists:keymember(Nick, 1, St#ch_st.users), St}.
+
 
 %% Sends a message to all the users in the list.
 sendToUsers([], _) ->

@@ -1,7 +1,7 @@
 % This record defines the structure of the client process.
 % It contains the following fields:
 %   gui: the name (or Pid) of the GUI process.
--record(cl_st, {gui, nick, server}).
+-record(cl_st, {gui, nick, server = disconnected}).
 
 % This record defines the structure of the server process.
 % It contains the following fields:
@@ -12,4 +12,3 @@
 % It contains the following fields:
 %
 -record(ch_st, {name, users = []}).
-

@@ -11,68 +11,68 @@ main(State) ->
       main(NextState)
   end.
 
-%% Produce initial state
+%% Produce initial state.
 initial_state(Nick, GUIName) ->
     #cl_st { gui = GUIName, nick = Nick }.
 
 %% ---------------------------------------------------------------------------
 
-%% loop handles each kind of request from GUI
+%% Loop handles each kind of request from GUI and server.
 
 %% Connect to server
 loop(St, {connect, Server}) ->
   NewState = St#cl_st{server = list_to_atom(Server)},
   serverRequest(NewState, {connect, user(St)});
 
-%% Disconnect from server
+%% Disconnect from server.
 loop(St, disconnect) ->
   case St#cl_st.server of
-    undefined ->
+    disconnected ->
       errorMessage({error, user_not_connected}, St);
     _ ->
       Response = serverRequest(St, {disconnect, user(St)}),
       case Response of
         {ok, _} ->
-          {ok, St#cl_st{server = undefined}};
+          {ok, St#cl_st{server = disconnected}};
         Error ->
           Error
       end
   end;
 
-% Join channel
+% Join channel.
 loop(St, {join, Channel}) ->
   serverRequest(St, {join, user(St), Channel});
 
-%% Leave channel
+%% Leave channel.
 loop(St, {leave, Channel}) ->
   serverRequest(St, {leave, user(St), Channel});
 
-% Sending messages
+% Sending messages.
 loop(St, {msg_from_GUI, Channel, Msg}) ->
   serverRequest(St, {send_msg, user(St), Channel, Msg});
 
-%% Get current nick
+%% Get current nick.
 loop(St, whoami) ->
   {St#cl_st.nick, St};
 
-%% Change nick
+%% Change nick.
 loop(St, {nick, Nick}) ->
   case St#cl_st.server of
-    undefined ->
+    disconnected ->
       NewState = St#cl_st{nick = Nick},
       {ok, NewState};
     _ ->
       errorMessage({error, user_already_connected}, St)
   end;
 
-%% Incoming message
+%% Incoming message from server.
 loop(St = #cl_st { gui = GUIName }, MsgFromClient) ->
     {incoming_msg, Channel, Name, Msg} = MsgFromClient,
     gen_server:call(list_to_atom(GUIName),
       {msg_to_GUI, Channel, Name++"> "++Msg}),
     {ok, St}.
 
-%% Returns the user tuple for the server.
+%% Returns a tuple of the clients user name and process id.
 user(St) ->
   {St#cl_st.nick, self()}.
 
@@ -104,7 +104,7 @@ errorMessage(Error, St) ->
     {error, user_not_connected} ->
       {{error, user_not_connected,
         "You are not connected to the server!"},
-        St#cl_st{server = undefined}};
+        St#cl_st{server = disconnected}};
     {error, user_already_connected} ->
       {{error, user_already_connected,
         "You are already connected!"}, St};
@@ -117,6 +117,6 @@ errorMessage(Error, St) ->
       {{error, user_already_joined, "You have already joined!"}, St};
     {error, server_not_reached} ->
       {{error, server_not_reached,
-        "The server could not be reached, you have been disconnected!"},
-        St#cl_st{server = undefined}}
+        "The server could not be reached!"},
+        St#cl_st{server = disconnected}}
   end.

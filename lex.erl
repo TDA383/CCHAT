@@ -1,4 +1,4 @@
--file("/chalmers/sw/sup64/erlang-17.4/lib/erlang/lib/parsetools-2.0.12/include/leexinc.hrl", 0).
+-file("/usr/local/lib/erlang/lib/parsetools-2.0.12/include/leexinc.hrl", 0).
 %% The source of this file is part of leex distribution, as such it
 %% has the same Copyright as the other files in the leex
 %% distribution. The Copyright is defined in the accompanying file
@@ -14,7 +14,7 @@
 %% User code. This is placed here to allow extra attributes.
 -file("./lex.xrl", 81).
 
--file("/chalmers/sw/sup64/erlang-17.4/lib/erlang/lib/parsetools-2.0.12/include/leexinc.hrl", 14).
+-file("/usr/local/lib/erlang/lib/parsetools-2.0.12/include/leexinc.hrl", 14).
 
 format_error({illegal,S}) -> ["illegal characters ",io_lib:write_string(S)];
 format_error({user,S}) -> S.
@@ -641,4 +641,4 @@ yyaction_15(TokenChars, TokenLine) ->
 yyaction_16(TokenChars, TokenLine) ->
      { token, { '@', TokenLine, TokenChars } } .
 
--file("/chalmers/sw/sup64/erlang-17.4/lib/erlang/lib/parsetools-2.0.12/include/leexinc.hrl", 282).
+-file("/usr/local/lib/erlang/lib/parsetools-2.0.12/include/leexinc.hrl", 282).
