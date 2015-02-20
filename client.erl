@@ -21,7 +21,7 @@ initial_state(Nick, GUIName) ->
 
 %% Connect to server
 loop(St, {connect, Server}) ->
-  NewState = St#cl_st{server = Server},
+  NewState = St#cl_st{server = list_to_atom(Server)},
   serverRequest(NewState, {connect, user(St)});
 
 %% Disconnect from server
@@ -81,8 +81,7 @@ user(St) ->
 %% the error message received from the server. If no message is received after
 %% 3 seconds, error 'server_not_reached' will be returned.
 serverRequest(St, Request) ->
-  Server = St#cl_st.server,
-  ServerAtom = list_to_atom(Server),
+  ServerAtom = St#cl_st.server,
   case lists:member(ServerAtom, registered()) of
     true ->
       Ref = make_ref(),
