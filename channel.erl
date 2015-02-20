@@ -41,7 +41,7 @@ loop(St, {leave, User}) ->
       {{error, user_not_joined}, St}
   end;
 
-%% Sends a message.
+%% Sends a message to all the other users in the channel.
 loop(St, {send_msg, Sender, Msg}) ->
   {Nick, _} = Sender,
   case lists:keymember(Nick, 1, St#ch_st.users) of

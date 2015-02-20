@@ -49,7 +49,13 @@ loop(St, {leave, Channel}) ->
 
 % Sending messages.
 loop(St, {msg_from_GUI, Channel, Msg}) ->
-  serverRequest(St, {send_msg, user(St), Channel, Msg});
+  Result = helper:request(list_to_atom(Channel), {send_msg, user(St), Msg}),
+  case Result of
+    ok ->
+      {ok, St};
+    Error ->
+      errorMessage(Error, St)
+  end;
 
 %% Get current nick.
 loop(St, whoami) ->
@@ -84,15 +90,12 @@ serverRequest(St, Request) ->
   ServerAtom = St#cl_st.server,
   case lists:member(ServerAtom, registered()) of
     true ->
-      Ref = make_ref(),
-      ServerAtom ! {request, self(), Ref, Request},
-      receive
-        {result, Ref, ok} ->
+      Result = helper:request(ServerAtom, Request),
+      case Result of
+        ok ->
           {ok, St};
-        {result, Ref, {error, Error}} ->
-          errorMessage({error, Error}, St)
-      after 3000 ->
-        errorMessage({error, server_not_reached}, St)
+        Error ->
+          errorMessage(Error, St)
       end;
     false ->
       errorMessage({error, server_not_reached}, St)

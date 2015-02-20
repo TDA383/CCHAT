@@ -60,8 +60,8 @@ loop(St, {disconnect, User}) ->
 %% channel and updates the server state. A new channel is created if the
 %%% specified channel doesn't exist.
 loop(St, Ref, {join, User, Channel}) ->
-  {_, Pid} = User,
-  case lists:member(User, St#server_st.users) of
+  {Nick, Pid} = User,
+  case lists:keymember(Nick, 1, St#server_st.users) of
     true ->
       ChannelAtom = list_to_atom(Channel),
       case lists:member(ChannelAtom, registered()) of
@@ -85,8 +85,8 @@ loop(St, Ref, {join, User, Channel}) ->
 %% the channel and updates the server state, if and only if the client is
 %% already connected to the channel.
 loop(St, Ref, {leave, User, Channel}) ->
-  {_, Pid} = User,
-  case lists:member(User, St#server_st.users) of
+  {Nick, Pid} = User,
+  case lists:keymember(Nick, 1, St#server_st.users) of
     true ->
       ChannelAtom = list_to_atom(Channel),
       case lists:member(ChannelAtom, registered()) of
@@ -105,8 +105,8 @@ loop(St, Ref, {leave, User, Channel}) ->
 %% Sends a request to the channel to send a message to all other members of
 %% the channel.
 loop(St, Ref, {send_msg, User, Channel, Msg}) ->
-   {_, Pid} = User,
-  case lists:member(User, St#server_st.users) of
+   {Nick, Pid} = User,
+  case lists:keymember(Nick, 1, St#server_st.users) of
     true ->
       ChannelAtom = list_to_atom(Channel),
       case lists:member(ChannelAtom, registered()) of
@@ -127,11 +127,10 @@ isInAChannel(_, []) ->
   false;
 
 isInAChannel(User, [ChannelAtom | T]) ->
-  Ref = make_ref(),
-  ChannelAtom ! {request, self(), Ref, {member, User}},
-  receive
-    {result, Ref, true} ->
+  Result = helper:request(ChannelAtom, {member, User}),
+  case Result of
+    true ->
       true;
-    {result, Ref, false} ->
+    false ->
       isInAChannel(User, T)
   end.
