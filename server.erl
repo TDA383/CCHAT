@@ -39,14 +39,14 @@ loop(St, {connect, User}) ->
   end;
 
 %% Disconnects the client and updates the server state, if the client
-%% is already connected and not connected to a channel.
+%% is disconnected from all channels.
 loop(St, {disconnect, User}) ->
   {Nick, _} = User,
   case lists:keymember(Nick, 1, St#server_st.users) of
-    true  ->
-    case isInAChannel(User, St#server_st.channels) of
+    true ->
+      case isInAChannel(User, St#server_st.channels) of
         false ->
-          NewState = #server_st{users = lists:delete(User,
+          NewState = St#server_st{users = lists:delete(User,
             St#server_st.users)},
           {ok, NewState};
         true ->

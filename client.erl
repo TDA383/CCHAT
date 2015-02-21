@@ -43,9 +43,29 @@ loop(St, disconnect) ->
 loop(St, {join, Channel}) ->
   serverRequest(St, {join, user(St), Channel});
 
-%% Leave channel.
+%% Leaves channel by sending request directly to the channel, to prevent
+%% bottle-necking in the server.
 loop(St, {leave, Channel}) ->
-  serverRequest(St, {leave, user(St), Channel});
+  case St#cl_st.server of
+    disconnected ->
+      errorMessage({error, user_not_connected}, St);
+    _ ->
+      ChannelAtom = list_to_atom(Channel),
+      case lists:member(ChannelAtom, registered()) of
+        true ->
+          Result = helper:request(list_to_atom(Channel), {leave, user(St)}),
+          case Result of
+            ok ->
+              {ok, St};
+            Error ->
+              errorMessage(Error, St)
+          end;
+        false ->
+          errorMessage({error, user_not_joined}, St)
+      end
+  end;
+
+  %%serverRequest(St, {leave, user(St), Channel});
 
 % Sending messages.
 loop(St, {msg_from_GUI, Channel, Msg}) ->

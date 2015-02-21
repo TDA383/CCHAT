@@ -62,6 +62,6 @@ loop(St, {member, {Nick, _}}) ->
 sendToUsers([], _) ->
   ok;
 
-sendToUsers([ {_, UserPid} | T ], Msg) ->
-  UserPid ! {request, self(), async, Msg},
+sendToUsers([ {_, Pid} | T ], Msg) ->
+  helper:requestAsync(Pid, Msg),
   sendToUsers(T, Msg).
