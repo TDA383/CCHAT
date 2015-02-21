@@ -65,8 +65,6 @@ loop(St, {leave, Channel}) ->
       end
   end;
 
-  %%serverRequest(St, {leave, user(St), Channel});
-
 % Sending messages.
 loop(St, {msg_from_GUI, Channel, Msg}) ->
   Result = helper:request(list_to_atom(Channel), {send_msg, user(St), Msg}),

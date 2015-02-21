@@ -29,8 +29,7 @@ initial_state(ServerName) ->
 %% Connects the client and updates the server state, if not the client is
 %% already a member.
 loop(St, {connect, User}) ->
-  {Nick, _} = User,
-  case lists:keymember(Nick, 1, St#server_st.users) of
+  case lists:member(User, St#server_st.users) of
     false  ->
       NewState = St#server_st{users = [ User | St#server_st.users]},
       {ok, NewState};
@@ -41,8 +40,7 @@ loop(St, {connect, User}) ->
 %% Disconnects the client and updates the server state, if the client
 %% is disconnected from all channels.
 loop(St, {disconnect, User}) ->
-  {Nick, _} = User,
-  case lists:keymember(Nick, 1, St#server_st.users) of
+  case lists:member(User, St#server_st.users) of
     true ->
       case isInAChannel(User, St#server_st.channels) of
         false ->
@@ -60,8 +58,8 @@ loop(St, {disconnect, User}) ->
 %% channel and updates the server state. A new channel is created if the
 %%% specified channel doesn't exist.
 loop(St, Ref, {join, User, Channel}) ->
-  {Nick, Pid} = User,
-  case lists:keymember(Nick, 1, St#server_st.users) of
+  {_, Pid} = User,
+  case lists:member(User, St#server_st.users) of
     true ->
       ChannelAtom = list_to_atom(Channel),
       case lists:member(ChannelAtom, registered()) of
@@ -85,8 +83,8 @@ loop(St, Ref, {join, User, Channel}) ->
 %% the channel and updates the server state, if and only if the client is
 %% already connected to the channel.
 loop(St, Ref, {leave, User, Channel}) ->
-  {Nick, Pid} = User,
-  case lists:keymember(Nick, 1, St#server_st.users) of
+  {_, Pid} = User,
+  case lists:member(User, St#server_st.users) of
     true ->
       ChannelAtom = list_to_atom(Channel),
       case lists:member(ChannelAtom, registered()) of
@@ -105,8 +103,8 @@ loop(St, Ref, {leave, User, Channel}) ->
 %% Sends a request to the channel to send a message to all other members of
 %% the channel.
 loop(St, Ref, {send_msg, User, Channel, Msg}) ->
-   {Nick, Pid} = User,
-  case lists:keymember(Nick, 1, St#server_st.users) of
+  {_, Pid} = User,
+  case lists:member(User, St#server_st.users) of
     true ->
       ChannelAtom = list_to_atom(Channel),
       case lists:member(ChannelAtom, registered()) of
