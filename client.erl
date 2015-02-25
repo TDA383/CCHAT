@@ -46,34 +46,11 @@ loop(St, {join, Channel}) ->
 %% Leaves channel by sending request directly to the channel, to prevent
 %% bottle-necking in the server.
 loop(St, {leave, Channel}) ->
-  case St#cl_st.server of
-    disconnected ->
-      errorMessage({error, user_not_connected}, St);
-    _ ->
-      ChannelAtom = list_to_atom(Channel),
-      case lists:member(ChannelAtom, registered()) of
-        true ->
-          Result = helper:request(list_to_atom(Channel), {leave, user(St)}),
-          case Result of
-            ok ->
-              {ok, St};
-            Error ->
-              errorMessage(Error, St)
-          end;
-        false ->
-          errorMessage({error, user_not_joined}, St)
-      end
-  end;
+  channelRequest(St, Channel, {leave, user(St)}); 
 
 % Sending messages.
 loop(St, {msg_from_GUI, Channel, Msg}) ->
-  Result = helper:request(list_to_atom(Channel), {send_msg, user(St), Msg}),
-  case Result of
-    ok ->
-      {ok, St};
-    Error ->
-      errorMessage(Error, St)
-  end;
+  channelRequest(St, Channel, {send_msg, user(St), Msg});  
 
 %% Get current nick.
 loop(St, whoami) ->
@@ -100,23 +77,46 @@ loop(St = #cl_st { gui = GUIName }, MsgFromClient) ->
 user(St) ->
   {St#cl_st.nick, self()}.
 
-%% Sends a request to the current server. If it fails to connect, it returns
-%% {error, user_not_connected}. If it succeeds, it will either return 'ok' or
-%% the error message received from the server. If no message is received after
-%% 3 seconds, error 'server_not_reached' will be returned.
+%% Sends a request to the current server. 
 serverRequest(St, Request) ->
   ServerAtom = St#cl_st.server,
   case lists:member(ServerAtom, registered()) of
     true ->
-      Result = helper:request(ServerAtom, Request),
-      case Result of
+      try helper:request(ServerAtom, Request) of
         ok ->
           {ok, St};
         Error ->
           errorMessage(Error, St)
+      catch
+        exit:"Timeout" -> 
+          errorMessage({error, server_not_reached}, St)     
       end;
     false ->
       errorMessage({error, server_not_reached}, St)
+  end.
+
+%% Sends a request to a given channel, if the user is already connected to the
+%% server.
+channelRequest(St, Channel, Request) -> 
+  case St#cl_st.server of
+    disconnected ->
+      errorMessage({error, user_not_connected}, St);
+    _ ->
+      ChannelAtom = list_to_atom(Channel),
+      case lists:member(ChannelAtom, registered()) of
+        true ->
+          try helper:request(ChannelAtom, Request) of
+            ok ->
+              {ok, St};
+            Error ->
+              errorMessage(Error, St)
+          catch
+            exit:"Timeout" ->
+              errorMessage({error, server_not_reached}, St)          
+          end;
+        false ->
+          errorMessage({error, user_not_joined}, St)
+      end
   end.
 
 %% Returns the error message corresponding to the error atom.

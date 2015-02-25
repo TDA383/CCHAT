@@ -47,7 +47,7 @@ loop(St, {send_msg, Sender, Msg}) ->
   case lists:keymember(Nick, 1, St#ch_st.users) of
     true ->
       Receivers = lists:delete(Sender, St#ch_st.users),
-      sendToUsers(Receivers, {incoming_msg, St#ch_st.name, Nick, Msg}),
+      spawn(fun() -> sendToUsers(Receivers, {incoming_msg, St#ch_st.name, Nick, Msg}) end),
       {ok, St};
     false ->
       {{error, user_not_joined}, St}
