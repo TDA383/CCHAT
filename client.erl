@@ -46,23 +46,24 @@ loop(St, {join, Channel}) ->
 %% Leaves channel by sending request directly to the channel, to prevent
 %% bottle-necking in the server.
 loop(St, {leave, Channel}) ->
-  channelRequest(St, Channel, {leave, user(St)}); 
+  channelRequest(St, Channel, {leave, user(St)});
 
 % Sending messages.
 loop(St, {msg_from_GUI, Channel, Msg}) ->
-  channelRequest(St, Channel, {send_msg, user(St), Msg});  
+  channelRequest(St, Channel, {send_msg, user(St), Msg});
 
 % Receives ping from user.
-loop(St, {ping_from_user, From, TimeStamp}) -> 
+loop(St, {ping_from_user, From, TimeStamp}) ->
   {Pid, Nick} = From,
-  helper:requestAsync(Pid, {pong, Nick, TimeStamp}),              
+  helper:requestAsync(Pid, {pong, Nick, TimeStamp}),
   {ok, St};
 
 % Pings another user.
 loop(St, {ping, Nick}) ->
   serverRequest(St, {ping, Nick, now()});
 
-loop(St, {pong, Nick, TimeStamp}) -> 
+% Receives pong from the pinged user.
+loop(St, {pong, Nick, TimeStamp}) ->
   Diff = helper:timeSince(TimeStamp),
   gen_server:call(list_to_atom(St#cl_st.gui),
     {msg_to_SYSTEM, io_lib:format("Pong ~s: ~pms", [Nick,Diff])}),
@@ -93,7 +94,7 @@ loop(St = #cl_st { gui = GUIName }, MsgFromClient) ->
 user(St) ->
   {St#cl_st.nick, self()}.
 
-%% Sends a request to the current server. 
+%% Sends a request to the current server.
 serverRequest(St, Request) ->
   ServerAtom = St#cl_st.server,
   case lists:member(ServerAtom, registered()) of
@@ -104,8 +105,8 @@ serverRequest(St, Request) ->
         Error ->
           errorMessage(Error, St)
       catch
-        exit:"Timeout" -> 
-          errorMessage({error, server_not_reached}, St)     
+        exit:"Timeout" ->
+          errorMessage({error, server_not_reached}, St)
       end;
     false ->
       errorMessage({error, server_not_reached}, St)
@@ -113,7 +114,7 @@ serverRequest(St, Request) ->
 
 %% Sends a request to a given channel, if the user is already connected to the
 %% server.
-channelRequest(St, Channel, Request) -> 
+channelRequest(St, Channel, Request) ->
   case St#cl_st.server of
     disconnected ->
       errorMessage({error, user_not_connected}, St);
@@ -128,7 +129,7 @@ channelRequest(St, Channel, Request) ->
               errorMessage(Error, St)
           catch
             exit:"Timeout" ->
-              errorMessage({error, server_not_reached}, St)          
+              errorMessage({error, server_not_reached}, St)
           end;
         false ->
           errorMessage({error, user_not_joined}, St)
