@@ -125,11 +125,11 @@ loop(St, Ref, {send_msg, User, Channel, Msg}) ->
       {error, St}
   end;
 
-%% Ping
+%% Sends a message to the user being pinged.
 loop(St, Pid, {ping, Nick, TimeStamp}) ->
   case lists:keyfind(Nick, 1, St#server_st.users) of
     {_,To} ->
-      helper:requestAsync(To, {ping_from_user, {Pid, Nick}, TimeStamp}),      
+      helper:requestAsync(To, {ping_from_user, {Pid, Nick}, TimeStamp}),
       {ok, St};
     false ->
       {{error, user_not_found}, St}
