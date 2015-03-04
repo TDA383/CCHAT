@@ -52,6 +52,22 @@ loop(St, {leave, Channel}) ->
 loop(St, {msg_from_GUI, Channel, Msg}) ->
   channelRequest(St, Channel, {send_msg, user(St), Msg});  
 
+% Receives ping from user.
+loop(St, {ping_from_user, From, TimeStamp}) -> 
+  {Pid, Nick} = From,
+  helper:requestAsync(Pid, {pong, Nick, TimeStamp}),              
+  {ok, St};
+
+% Pings another user.
+loop(St, {ping, Nick}) ->
+  serverRequest(St, {ping, Nick, now()});
+
+loop(St, {pong, Nick, TimeStamp}) -> 
+  Diff = helper:timeSince(TimeStamp),
+  gen_server:call(list_to_atom(St#cl_st.gui),
+    {msg_to_SYSTEM, io_lib:format("Pong ~s: ~pms", [Nick,Diff])}),
+  {ok, St};
+
 %% Get current nick.
 loop(St, whoami) ->
   {St#cl_st.nick, St};
@@ -129,6 +145,9 @@ errorMessage(Error, St) ->
     {error, user_already_connected} ->
       {{error, user_already_connected,
         "You are already connected!"}, St};
+    {error, user_not_found} ->
+      {{error, user_not_found,
+        "The user is not connected to the server!"}, St};
     {error, leave_channels_first} ->
       {{error, leave_channels_first,
         "Leave all channels before disconnecting!"}, St};

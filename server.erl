@@ -13,6 +13,9 @@ main(State) ->
         {disconnect,_} ->
           {Response, NextState} = loop(State, Request),
           From ! {result, Ref, Response};
+        {ping,_,_} ->
+          {Response, NextState} = loop(State, From, Request),
+          From ! {result, Ref, Response};
         _ ->
           {_, NextState} = loop(State, Ref, Request)
         end,
@@ -120,6 +123,16 @@ loop(St, Ref, {send_msg, User, Channel, Msg}) ->
     false ->
       Pid ! {result, Ref, {error, user_not_connected}},
       {error, St}
+  end;
+
+%% Ping
+loop(St, Pid, {ping, Nick, TimeStamp}) ->
+  case lists:keyfind(Nick, 1, St#server_st.users) of
+    {_,To} ->
+      helper:requestAsync(To, {ping_from_user, {Pid, Nick}, TimeStamp}),      
+      {ok, St};
+    false ->
+      {{error, user_not_found}, St}
   end.
 
 %% Determines whether a user is connected to one or more channels, or not.
